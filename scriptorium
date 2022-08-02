@@ -304,7 +304,7 @@ class Scripts:
         logger.addHandler(ch)
         logger.setLevel(LOGLEVEL)
 
-    def both_repos(args, jpc, command, sh=False):
+    def both_repos(self, jpc, command, sh=False):
         """ do a shell command in each of our two directories """
 
         complete = subprocess.run(
@@ -314,7 +314,7 @@ class Scripts:
             # git can print a heap so give our user just the first 5 lines
             out = f"{complete.stderr}{complete.stdout}"
             lines = out.split("\n")
-            for i in lines[0:5]:
+            for i in lines[:5]:
                 print(i)
             raise ScriptError(f"text directory failed: {command}")
         if complete.stderr:
@@ -328,7 +328,7 @@ class Scripts:
             # git can print a heap so give our user just the first 5 lines
             out = f"{complete.stderr}{complete.stdout}"
             lines = out.split("\n")
-            for i in lines[0:5]:
+            for i in lines[:5]:
                 print(i)
             raise ScriptError(f"XML directory failed: {command}")
         if complete.stderr:
@@ -336,12 +336,12 @@ class Scripts:
             print(" ".join(command))
             info(complete.stderr)
 
-    def do_add(args, jpc):
+    def do_add(self, jpc):
         """ add in all three spots """
 
-        filename = args.filename if args.filename else input("Filename: ")
-        notes = args.notes if args.notes else input("Notes: ")
-        if not args.zero:
+        filename = self.filename or input("Filename: ")
+        notes = self.notes or input("Notes: ")
+        if not self.zero:
             prompts = []
             prompt = "a"
             count = 4
@@ -370,7 +370,7 @@ class Scripts:
         ]
         answer = inquirer.prompt(questions)
         category = answer["category"]
-        if not (args.after or args.before or args.reboot):
+        if not (self.after or self.before or self.reboot):
             # we haven't specified a priority
             questions = [
                 inquirer.List(
@@ -381,14 +381,12 @@ class Scripts:
             ]
             answer = inquirer.prompt(questions)
             priority = answer["priority"]
-        elif args.after:
+        elif self.after:
             priority = "After"
-        elif args.before:
+        elif self.before:
             priority = "Before"
-        elif args.reboot:
-            priority = "Reboot"
         else:
-            raise ScriptError("Bad priority in Add")
+            priority = "Reboot"
         root = ET.fromstring(template)
         root.find("id").text = "0"
         root.find("filename").text = filename
@@ -398,11 +396,9 @@ class Scripts:
         root.find("notes").text = notes
         root.find("priority").text = priority
         params = root.find("parameters")
-        if not args.zero:
-            count = 4
-            for p in prompts:
+        if not self.zero:
+            for count, p in enumerate(prompts, start=4):
                 ET.SubElement(params, f"parameter{count}").text = p
-                count += 1
         # we should now have a nice XML tree.
         data = ET.tostring(root)
         url = f"{jpc.scriptsURL}/id/0"
@@ -427,26 +423,26 @@ class Scripts:
             fp.write(xml.decode())
         with sh_filepath.open(mode="w") as fp:
             fp.write(f"# {filename}")
-        args.message = f"adding {filename}"
-        if args.dont_commit:
+        self.message = f"adding {filename}"
+        if self.dont_commit:
             exit()
-        Scripts.do_commit(args, jpc)
+        Scripts.do_commit(self, jpc)
 
-    def do_commit(args, jpc):
+    def do_commit(self, jpc):
         """ do a git commit """
         """ this commit, and optionally a push, on both directories """
 
-        lst = Scripts.do_up(args, jpc)
+        lst = Scripts.do_up(self, jpc)
         command = ["git", "add", "*"]
-        Scripts.both_repos(args, jpc, command)
-        msg = args.message if args.message else lst
+        Scripts.both_repos(self, jpc, command)
+        msg = self.message or lst
         command = ["git", "commit", "-m", msg]
-        Scripts.both_repos(args, jpc, command)
-        if args.push:
+        Scripts.both_repos(self, jpc, command)
+        if self.push:
             command = ["git", "push"]
-            Scripts.both_repos(args, jpc, command)
+            Scripts.both_repos(self, jpc, command)
 
-    def do_down(args, jpc):
+    def do_down(self, jpc):
         """ subcommand `down` """
 
         logger.info(" ".join(argv[1:]))
@@ -456,7 +452,7 @@ class Scripts:
         for script in ret.json()["scripts"]:
             idn = script["id"]
             name = script["name"]
-            if args.script and name != args.script:
+            if self.script and name != self.script:
                 continue
             if "/" in name:
                 print(f"Illegal character '/' in script {name}:{idn}")
@@ -474,29 +470,26 @@ class Scripts:
             xml = ET.tostring(root)
             xml_filepath = Path(f"{jpc.xml_dir}/{name}")
             sh_filepath = Path(f"{jpc.txt_dir}/{name}")
-            if not args.no_force or not xml_filepath.is_file():
+            if not self.no_force or not xml_filepath.is_file():
                 info(f"Writing XML {name}")
                 with xml_filepath.open(mode="w") as fp:
                     fp.write(xml.decode())
-            if not args.no_force or not sh_filepath.is_file():
+            if not self.no_force or not sh_filepath.is_file():
                 info(f"Writing script {name}")
                 with sh_filepath.open(mode="w") as fp:
                     fp.write(text)
         exit()
 
-    def do_git(args, jpc):
+    def do_git(self, jpc):
         """ subcommand `git` """
 
-        if args.command:
-            string = args.command
-        else:
-            string = input("Command for git: ")
+        string = self.command or input("Command for git: ")
         command = f"git {string}".split(" ")
         logger.info(f"Git command: {command}")
-        Scripts.both_repos(args, jpc, command)
+        Scripts.both_repos(self, jpc, command)
         exit()
 
-    def do_list(args, jpc):
+    def do_list(self, jpc):
         """ subcommand `list` """
 
         logger.info("list command")
@@ -511,15 +504,15 @@ class Scripts:
         logger.info("list succeeded")
         exit()
 
-    def do_push(args, jpc):
+    def do_push(self, jpc):
         command = ["git", "push"]
-        Scripts.both_repos(args, jpc, command)
+        Scripts.both_repos(self, jpc, command)
 
-    def do_del(args, jpc):
+    def do_del(self, jpc):
         """ subcommand `delete` """
 
         logger.info(" ".join(argv[1:]))
-        xml_filepath = jpc.xml_dir / args.name
+        xml_filepath = jpc.xml_dir / self.name
         x = xml_filepath.read_text()
         root = ET.fromstring(x)
         idn = root.findtext("id")
@@ -530,24 +523,24 @@ class Scripts:
             raise ScriptError(
                 f"failed to delete to JPC: {ret.status_code}: {url}"
             )
-        f = Path(args.name)
+        f = Path(self.name)
         command = ["git", "rm", f]
-        Scripts.both_repos(args, jpc, command, sh=False)
-        if args.dont_commit:
+        Scripts.both_repos(self, jpc, command, sh=False)
+        if self.dont_commit:
             exit()
-        args.message = f"remove {args.name}"
-        Scripts.do_commit(args, jpc)
+        self.message = f"remove {self.name}"
+        Scripts.do_commit(self, jpc)
         exit()
 
-    def do_rename(args, jpc):
+    def do_rename(self, jpc):
         """ subcommand `rename` """
 
         logger.info(" ".join(argv[1:]))
-        xml_filepath = jpc.xml_dir / args.src
+        xml_filepath = jpc.xml_dir / self.src
         x = xml_filepath.read_text()
         root = ET.fromstring(x)
         idn = root.findtext("id")
-        root.find("name").text = args.dst
+        root.find("name").text = self.dst
         root.find("script_contents_encoded").text = ""
         ET.indent(root)
         data = ET.tostring(root)
@@ -559,16 +552,16 @@ class Scripts:
             raise ScriptError(
                 f"failed to write to JPC: {ret.status_code}: {url}"
             )
-        command = ["git", "mv", Path(args.src), Path(args.dst)]
-        Scripts.both_repos(args, jpc, command)
-        if args.dont_commit:
+        command = ["git", "mv", Path(self.src), Path(self.dst)]
+        Scripts.both_repos(self, jpc, command)
+        if self.dont_commit:
             exit()
-        args.message = f"{args.src} to {args.dst}"
-        Scripts.do_commit(args, jpc)
+        self.message = f"{self.src} to {self.dst}"
+        Scripts.do_commit(self, jpc)
         logger.info("remove succeeded")
         exit()
 
-    def do_up(args, jpc):
+    def do_up(self, jpc):
         """ subcommand `up` """
 
         logger.info(" ".join(argv[1:]))
@@ -580,7 +573,7 @@ class Scripts:
         if complete.returncode != 0:
             # git diff prints a heap so give our user just the first 5 lines
             lines = complete.stderr.split("\n")
-            for i in lines[0:5]:
+            for i in lines[:5]:
                 print(i)
             raise ScriptError("git diff in scripts directory failed")
         if complete.stdout == "":
@@ -623,7 +616,7 @@ class Scripts:
             x_file.write_text(xml.decode())
         return " ".join(files)
 
-    def do_verify(args, jpc):
+    def do_verify(self, jpc):
         """ verify scripts, XML and server against each other """
 
         # get list of script files
@@ -641,19 +634,12 @@ class Scripts:
         if ret.status_code != 200:
             raise ScriptError(f"list get failed with error: {ret.status_code}")
         # scripts on server
-        scripts = []
-        for script in ret.json()["scripts"]:
-            scripts.append(script["name"])
+        scripts = [script["name"] for script in ret.json()["scripts"]]
         # good for lists
         d = difflib.Differ()
         # first compare
         result = list(d.compare(xml, sh))
-        out = []
-        # print only changes
-        for line in result:
-            if line[0] != " ":
-                out.append(line)
-        if out:
+        if out := [line for line in result if line[0] != " "]:
             print("XML > text")
             for line in out:
                 print(line)
@@ -664,25 +650,20 @@ class Scripts:
         xml.sort()
         scripts.sort()
         result = list(d.compare(xml, scripts))
-        out = []
-        # print only changes
-        for line in result:
-            if line[0] != " ":
-                out.append(line)
-        if out:
+        if out := [line for line in result if line[0] != " "]:
             print("XML > Jamf")
             for line in out:
                 print(line)
         else:
             print("XML = Jamf")
-        if args.quick:
+        if self.quick:
             exit()
 
         # main loop
 
         for script in ret.json()["scripts"]:
             name = script["name"]
-            if args.script and name != args.script:
+            if self.script and name != self.script:
                 continue
             print("*", end="")
             # info(f"Verifying {name}")
@@ -702,17 +683,12 @@ class Scripts:
             xml = xml.decode()
             xml = xml.splitlines()
             result = list(d.compare(xml_text, text))
-            out = []
-            # print only changes
-            for line in result:
-                if line[0] != " ":
-                    out.append(line)
-            if out:
+            if out := [line for line in result if line[0] != " "]:
                 print(f"\n{name}: XML > text")
-                if args.diff:
+                if self.diff:
                     for line in out:
                         print(line)
-            elif args.script:
+            elif self.script:
                 print(f"\n{name}: XML = text")
             ret = requests.get(f"{jpc.scriptsURL}/id/{idn}", auth=jpc.auth)
             if ret.status_code != 200:
@@ -727,17 +703,12 @@ class Scripts:
             jamf = jamf.decode()
             jamf = jamf.splitlines()
             result = list(d.compare(xml, jamf))
-            out = []
-            # print only changes
-            for line in result:
-                if line[0] != " ":
-                    out.append(line)
-            if out:
+            if out := [line for line in result if line[0] != " "]:
                 print(f"\n{name}: XML > Jamf")
-                if args.diff:
+                if self.diff:
                     for line in out:
                         print(line)
-            elif args.script:
+            elif self.script:
                 print(f"\n{name}: XML = Jamf")
         exit()
 
@@ -770,9 +741,7 @@ class Scripts:
             print("Missing subcommand")
             fred.parser.print_help()
             exit(1)
-        args = fred.parser.parse_args()
-        # we never return from below call
-        if args:
+        if args := fred.parser.parse_args():
             args.func(args, jpc)
         else:
             exit()
